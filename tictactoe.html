@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caro AI Pro - Tactical Engine Upgrade (V5/V7 Hybrid)</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Arial, sans-serif; background-color: #121218; color: #fff; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Sidebar Styling */
+        #sidebar { 
+            width: 330px; 
+            background-color: #1a1a24; 
+            border-right: 1px solid #2e2e3e; 
+            padding: 15px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 10px; 
+            z-index: 10; 
+            overflow-y: auto; 
+            transition: margin-left 0.3s ease;
+            position: relative;
+        }
+        #sidebar.collapsed { margin-left: -330px; }
+
+        /* Toggle Sidebar Button Outside Sidebar (Góc trên bên trái) */
+        #btnToggleSidebar {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 20;
+            background-color: #00d2ff;
+            color: #121218;
+            border: none;
+            padding: 8px 12px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        #btnToggleSidebar:hover { background-color: #00b8e6; }
+
+        /* Toggle Full UI Button (Góc trên bên phải) */
+        #btnToggleFullUI {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 25;
+            background-color: #ff9800;
+            color: #121218;
+            border: none;
+            padding: 8px 14px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        #btnToggleFullUI:hover { background-color: #fb8c00; }
+
+        h1 { font-size: 16px; color: #00d2ff; text-align: center; margin-top: 5px; }
+        .section { background-color: #232332; padding: 10px; border-radius: 6px; }
+        .btn-group { display: flex; gap: 5px; }
+        button, select { padding: 8px; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; }
+        select { width: 100%; background: #2e2e3e; color: #fff; margin-top: 5px; }
+        
+        #btnStart { background-color: #00c853; color: #fff; flex: 1; }
+        #btnAuto { background-color: #9c27b0; color: #fff; flex: 1; }
+        #btnStop { background-color: #d50000; color: #fff; flex: 1; }
+        #btnHint { background-color: #ffeb3b; color: #000; width: 100%; margin-top: 5px; font-size: 13px; }
+        #btnStep { background-color: #ff9800; color: #fff; margin-top: 5px; width: 100%; }
+        #btnCopyMoves { background-color: #3f51b5; color: #fff; width: 100%; margin-top: 5px; }
+        #btnReset { background-color: #37474f; color: #fff; width: 100%; margin-top: 5px; }
+        #btnClearMemory { background-color: #ff5722; color: #fff; width: 100%; margin-top: 5px; }
+        #btnToggleStats { background-color: #455a64; color: #fff; width: 100%; margin-top: 5px; }
+
+        .val-x { color: #ff5252; font-weight: bold; font-size: 16px; }
+        .val-o { color: #448aff; font-weight: bold; font-size: 16px; }
+        .control-label { font-size: 11px; color: #aaa; display: flex; justify-content: space-between; margin-top: 6px; }
+        input[type=range] { width: 100%; accent-color: #00d2ff; }
+        
+        #viewport { flex: 1; position: relative; background-color: #0b0b0e; overflow: hidden; cursor: grab; }
+        #viewport:active { cursor: grabbing; }
+        canvas { display: block; position: absolute; top: 0; left: 0; }
+        
+        /* Zoom Controls at Bottom Right */
+        .zoom-controls { 
+            position: absolute; 
+            bottom: 20px; 
+            right: 20px; 
+            display: flex; 
+            gap: 5px; 
+            background: rgba(26, 26, 36, 0.85); 
+            padding: 6px; 
+            border-radius: 6px; 
+            border: 1px solid #323246; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            z-index: 15;
+        }
+        .zoom-btn { 
+            padding: 0 10px; 
+            height: 35px; 
+            background: #232332; 
+            color: #fff; 
+            border: 1px solid #323246; 
+            border-radius: 4px; 
+            font-size: 14px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+        }
+        .zoom-btn:hover { background: #37474f; }
+        
+        .mode-badge { text-align: center; font-size: 12px; font-weight: bold; padding: 6px; border-radius: 4px; margin-bottom: 5px; }
+        .mode-aivsai { background: #2e7d32; }
+        .mode-playerai { background: #c62828; }
+        .mode-pvp { background: #0288d1; }
+
+        /* Lớp ẩn tất cả thành phần tinh chỉnh & bộ thu phóng */
+        .ui-clean-mode #sidebarSettings,
+        .ui-clean-mode #statsContainer,
+        .ui-clean-mode .zoom-controls {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <button id="btnToggleSidebar">◀ Ẩn Panel</button>
+    <button id="btnToggleFullUI">⚙️ UI Toggle</button>
+
+    <div id="sidebar">
+        <h1 style="margin-top: 35px;">Caro AI Pro + Tactical Engine</h1>
+        <div id="modeDisplay" class="mode-badge mode-aivsai">CHẾ ĐỘ: AI VS AI</div>
+        
+        <div class="section">
+            <label style="font-size: 12px; color: #aaa;">Chọn chế độ chơi:</label>
+            <select id="gameModeSelect">
+                <option value="aivsai">🤖 AI vs AI (Tự động đấu)</option>
+                <option value="p1_vs_ai">👤 Player (X) vs AI (O)</option>
+                <option value="ai_vs_p2">🤖 AI (X) vs Player (O)</option>
+                <option value="pvp">👥 Player vs Player (2 người)</option>
+            </select>
+
+            <div class="btn-group" style="margin-top: 8px;">
+                <button id="btnStart">▶ Bắt Đầu</button>
+                <button id="btnAuto">🔄 Tự Động</button>
+                <button id="btnStop">⏸ Dừng</button>
+            </div>
+            <button id="btnHint">💡 Gợi Ý Nước Đi (Player)</button>
+            <button id="btnStep">⏭ AI Đánh 1 Bước</button>
+            <button id="btnCopyMoves">📋 Sao chép nước đi</button>
+            <button id="btnReset">🔄 Reset Bàn Cờ</button>
+            <button id="btnClearMemory">🧠 Xóa Bộ Nhớ AI</button>
+            <button id="btnToggleStats">👁️ Ẩn/Hiện Bảng Dữ Liệu</button>
+        </div>
+
+        <div class="section" id="sidebarSettings">
+            <div class="control-label">Độ sâu Minimax: <span id="depthVal" style="color:#00d2ff">3 nước</span></div>
+            <input type="range" id="depthSlider" min="1" max="4" value="3">
+
+            <div class="control-label">Tốc độ AI: <span id="speedVal" style="color:#00d2ff">1 ms</span></div>
+            <input type="range" id="speedSlider" min="1" max="1000" value="1">
+
+            <div class="control-label">Điểm cộng khi THẮNG: <span id="winVal" style="color:#00c853">+1000</span></div>
+            <input type="range" id="winSlider" min="100" max="5000" step="100" value="1000">
+
+            <div class="control-label">Điểm trừ khi THUA: <span id="lossVal" style="color:#d50000">-1000</span></div>
+            <input type="range" id="lossSlider" min="100" max="5000" step="100" value="1000">
+
+            <div class="control-label">Điểm trừ khi HÒA: <span id="drawVal" style="color:#ffd700">-100</span></div>
+            <input type="range" id="drawSlider" min="0" max="2000" step="50" value="100">
+        </div>
+
+        <div id="statsContainer">
+            <div class="section">
+                <div>Tổng ván: <strong id="totalGames">0</strong></div>
+                <div>Hòa: <strong id="drawCount">0</strong></div>
+                <div>Trí nhớ AI (Ô cờ đã học): <strong id="memoryCount" style="color:#00d2ff">0</strong></div>
+            </div>
+            <div class="section" style="border-left: 4px solid #ff5252; margin-top: 8px;">
+                <div id="labelX" style="color: #ff5252; font-weight: bold;">🔴 Quân Đỏ (X)</div>
+                <div>Thắng: <span id="winsX">0</span></div>
+                <div>Điểm: <span id="scoreX" class="val-x">10000</span></div>
+            </div>
+            <div class="section" style="border-left: 4px solid #448aff; margin-top: 8px;">
+                <div id="labelO" style="color: #448aff; font-weight: bold;">🔵 Quân Xanh (O)</div>
+                <div>Thắng: <span id="winsO">0</span></div>
+                <div>Điểm: <span id="scoreO" class="val-o">10000</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="viewport">
+        <canvas id="gameCanvas"></canvas>
+        <div class="zoom-controls">
+            <button class="zoom-btn" id="btnZoomOut">-</button>
+            <button class="zoom-btn" id="btnZoomOut25">-25%</button>
+            <button class="zoom-btn" id="btnZoomReset">100%</button>
+            <button class="zoom-btn" id="btnZoomIn25">+25%</button>
+            <button class="zoom-btn" id="btnZoomIn">+</button>
+        </div>
+    </div>
+
+    <script>
+        const GRID_SIZE = 100;
+        let baseCellSize = 35, scale = 1.0, panX = 0, panY = 0; 
+
+        let board = Array.from({ length: GRID_SIZE }, () => new Uint8Array(GRID_SIZE));
+        let isRunning = false, isAutoLoop = false, speedMs = 1;
+        
+        let currentMode = 'aivsai'; 
+        let searchDepth = 3;
+        
+        let winPoints = 1000, lossPoints = 1000, drawPoints = 100;
+        let currentPlayer = 1;
+        let scoreX = 10000, scoreO = 10000;
+        let winsX = 0, winsO = 0, totalGames = 0, drawGames = 0;
+        let moveHistory = [];
+        let winningLine = null;
+        let suggestedMove = null;
+
+        let aiMemory = JSON.parse(localStorage.getItem('caro_ai_memory')) || {};
+
+        function saveMemory() {
+            try { localStorage.setItem('caro_ai_memory', JSON.stringify(aiMemory)); } catch(e) {}
+        }
+
+        function learnFromGame(winner) {
+            let rewardX = (winner === 1) ? winPoints : (winner === 2 ? -lossPoints : -drawPoints);
+            let rewardO = (winner === 2) ? winPoints : (winner === 1 ? -lossPoints : -drawPoints);
+
+            moveHistory.forEach((move, index) => {
+                let key = `${move.r}_${move.c}`;
+                if (!aiMemory[key]) aiMemory[key] = 0;
+                let weight = (index + 1) / moveHistory.length; 
+                let reward = (move.player === 1) ? rewardX : rewardO;
+                aiMemory[key] += Math.round(reward * weight * 0.1); 
+            });
+
+            saveMemory();
+        }
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const viewport = document.getElementById('viewport');
+
+        function resizeCanvas() {
+            canvas.width = viewport.clientWidth;
+            canvas.height = viewport.clientHeight;
+            draw();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        function centerView() {
+            scale = 1.0;
+            let effectiveCellSize = baseCellSize * scale;
+            panX = canvas.width / 2 - (50 * effectiveCellSize);
+            panY = canvas.height / 2 - (50 * effectiveCellSize);
+            draw();
+        }
+
+        let isDragging = false, dragStartX = 0, dragStartY = 0;
+        viewport.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        function isHumanTurn() {
+            if (currentMode === 'pvp') return true;
+            if (currentMode === 'p1_vs_ai' && currentPlayer === 1) return true;
+            if (currentMode === 'ai_vs_p2' && currentPlayer === 2) return true;
+            return false;
+        }
+
+        viewport.addEventListener('mousedown', (e) => {
+            if (e.button === 2) {
+                isDragging = true; dragStartX = e.clientX - panX; dragStartY = e.clientY - panY; return;
+            }
+            if (e.button === 0) {
+                if (isHumanTurn() && !winningLine) {
+                    let rect = canvas.getBoundingClientRect();
+                    let effectiveCell = baseCellSize * scale;
+                    let clickX = e.clientX - rect.left - panX;
+                    let clickY = e.clientY - rect.top - panY;
+                    let c = Math.floor(clickX / effectiveCell);
+                    let r = Math.floor(clickY / effectiveCell);
+
+                    if (r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE && board[r][c] === 0) {
+                        isRunning = true;
+                        suggestedMove = null;
+                        makeMove(r, c); 
+                        return;
+                    }
+                }
+                isDragging = true; dragStartX = e.clientX - panX; dragStartY = e.clientY - panY;
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging) { panX = e.clientX - dragStartX; panY = e.clientY - dragStartY; draw(); }
+        });
+        window.addEventListener('mouseup', () => { isDragging = false; });
+
+        viewport.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            let zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+            applyZoom(zoomFactor, e.clientX - viewport.getBoundingClientRect().left, e.clientY - viewport.getBoundingClientRect().top);
+        }, { passive: false });
+
+        function applyZoom(factor, mouseX, mouseY) {
+            let newScale = Math.min(Math.max(0.3, scale * factor), 3.0);
+            if (newScale === scale) return;
+            panX = mouseX - (mouseX - panX) * (newScale / scale);
+            panY = mouseY - (mouseY - panY) * (newScale / scale);
+            scale = newScale;
+            draw();
+        }
+
+        function checkWin(r, c, player) {
+            let dirs = [[0,1], [1,0], [1,1], [1,-1]];
+            for (let [dr, dc] of dirs) {
+                let line = [{r, c}];
+                let nr = r + dr, nc = c + dc;
+                while (nr>=0 && nr<GRID_SIZE && nc>=0 && nc<GRID_SIZE && board[nr][nc] === player) { line.push({r: nr, c: nc}); nr+=dr; nc+=dc; }
+                nr = r - dr; nc = c - dc;
+                while (nr>=0 && nr<GRID_SIZE && nc>=0 && nc<GRID_SIZE && board[nr][nc] === player) { line.unshift({r: nr, c: nc}); nr-=dr; nc-=dc; }
+                if (line.length >= 5) return line;
+            }
+            return null;
+        }
+
+        // =========================================================================
+        // ENGINE ENGINE UPGRADE: ZOBRIST HASHING, TRANSPOSITION TABLE, VCF, ADVANCED PATTERNS
+        // =========================================================================
+
+        const ZOBRIST_TABLE = Array.from({ length: GRID_SIZE }, () => 
+            Array.from({ length: GRID_SIZE }, () => [
+                BigInt(Math.floor(Math.random() * 0xFFFFFFFF)) | (BigInt(Math.floor(Math.random() * 0xFFFFFFFF)) << 32n),
+                BigInt(Math.floor(Math.random() * 0xFFFFFFFF)) | (BigInt(Math.floor(Math.random() * 0xFFFFFFFF)) << 32n)
+            ])
+        );
+        let currentBoardHash = 0n;
+        const TT_CACHE = new Map();
+
+        const PATTERNS = [
+            { pattern: "11111", score: 10000000 },
+            { pattern: "011110", score: 2000000 },
+            { pattern: "10111", score: 800000 },
+            { pattern: "11011", score: 800000 },
+            { pattern: "11101", score: 800000 },
+            { pattern: "011112", score: 150000 },
+            { pattern: "211110", score: 150000 },
+            { pattern: "01110", score: 100000 },
+            { pattern: "010110", score: 80000 },
+            { pattern: "011010", score: 80000 },
+            { pattern: "01112", score: 8000 },
+            { pattern: "21110", score: 8000 },
+            { pattern: "01100", score: 2000 },
+            { pattern: "00110", score: 2000 }
+        ];
+
+        function applyMoveToState(r, c, player) {
+            board[r][c] = player;
+            currentBoardHash ^= ZOBRIST_TABLE[r][c][player - 1];
+            moveHistory.push({ r, c, player });
+        }
+
+        function undoMoveFromState(r, c, player) {
+            board[r][c] = 0;
+            currentBoardHash ^= ZOBRIST_TABLE[r][c][player - 1];
+            moveHistory.pop();
+        }
+
+        function getLineString(r, c, dr, dc, player) {
+            let opponent = player === 1 ? 2 : 1;
+            let str = "";
+            for (let i = -4; i <= 4; i++) {
+                let nr = r + dr * i;
+                let nc = c + dc * i;
+                if (nr < 0 || nr >= GRID_SIZE || nc < 0 || nc >= GRID_SIZE) {
+                    str += "2";
+                } else {
+                    let val = board[nr][nc];
+                    if (val === player) str += "1";
+                    else if (val === opponent) str += "2";
+                    else str += "0";
+                }
+            }
+            return str;
+        }
+
+        function evaluateCellPattern(r, c, player) {
+            let dirs = [[0,1], [1,0], [1,1], [1,-1]];
+            let totalScore = 0;
+            let openThrees = 0;
+            let fours = 0;
+
+            let originalVal = board[r][c];
+            board[r][c] = player;
+
+            for (let [dr, dc] of dirs) {
+                let lineStr = getLineString(r, c, dr, dc, player);
+                for (let p of PATTERNS) {
+                    if (lineStr.includes(p.pattern)) {
+                        totalScore += p.score;
+                        if (p.score >= 80000 && p.score <= 100000) openThrees++;
+                        if (p.score >= 150000 && p.score <= 2000000) fours++;
+                    }
+                }
+            }
+
+            if (openThrees >= 2) totalScore += 900000;
+            if (fours >= 1 && openThrees >= 1) totalScore += 1800000;
+
+            board[r][c] = originalVal;
+
+            let memoryScore = aiMemory[`${r}_${c}`] || 0;
+            return totalScore + memoryScore;
+        }
+
+        function evaluateBoard(player) {
+            let opponent = player === 1 ? 2 : 1;
+            let myScore = 0;
+            let oppScore = 0;
+
+            for (let m of moveHistory) {
+                if (m.player === player) myScore += evaluateCellPattern(m.r, m.c, player);
+                else oppScore += evaluateCellPattern(m.r, m.c, opponent);
+            }
+            return myScore - (oppScore * 1.25); 
+        }
+
+        function getCandidates() {
+            let candidatesSet = new Set();
+            let candidates = [];
+
+            if (moveHistory.length === 0) return [{ r: 50, c: 50 }];
+
+            for (let i = 0; i < moveHistory.length; i++) {
+                let last = moveHistory[i];
+                for (let dr = -2; dr <= 2; dr++) {
+                    for (let dc = -2; dc <= 2; dc++) {
+                        if (dr === 0 && dc === 0) continue;
+                        let nr = last.r + dr, nc = last.c + dc;
+                        if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE && board[nr][nc] === 0) {
+                            let key = nr * 1000 + nc;
+                            if (!candidatesSet.has(key)) {
+                                candidatesSet.add(key);
+                                candidates.push({ r: nr, c: nc });
+                            }
+                        }
+                    }
+                }
+            }
+
+            for (let key in aiMemory) {
+                if (aiMemory[key] < -300) {
+                    let [mr, mc] = key.split('_').map(Number);
+                    if (board[mr][mc] === 0) {
+                        let candKey = mr * 1000 + mc;
+                        if (!candidatesSet.has(candKey)) {
+                            candidatesSet.add(candKey);
+                            candidates.push({ r: mr, c: mc });
+                        }
+                    }
+                }
+            }
+
+            return candidates;
+        }
+
+        function checkVCF(player, depth) {
+            if (depth <= 0) return null;
+            let opponent = player === 1 ? 2 : 1;
+            let candidates = getCandidates();
+
+            for (let cand of candidates) {
+                board[cand.r][cand.c] = player;
+                if (checkWin(cand.r, cand.c, player)) {
+                    board[cand.r][cand.c] = 0;
+                    return cand;
+                }
+                
+                let score = evaluateCellPattern(cand.r, cand.c, player);
+                if (score >= 150000) {
+                    let blockMove = null;
+                    for (let oppCand of candidates) {
+                        if (oppCand.r === cand.r && oppCand.c === cand.c) continue;
+                        board[oppCand.r][oppCand.c] = opponent;
+                        let oppScore = evaluateCellPattern(oppCand.r, oppCand.c, player);
+                        board[oppCand.r][oppCand.c] = 0;
+                        if (oppScore >= 1000000) {
+                            blockMove = oppCand;
+                            break;
+                        }
+                    }
+
+                    if (blockMove) {
+                        applyMoveToState(cand.r, cand.c, player);
+                        applyMoveToState(blockMove.r, blockMove.c, opponent);
+
+                        let subVCF = checkVCF(player, depth - 1);
+
+                        undoMoveFromState(blockMove.r, blockMove.c, opponent);
+                        undoMoveFromState(cand.r, cand.c, player);
+
+                        if (subVCF) return cand;
+                    }
+                }
+                board[cand.r][cand.c] = 0;
+            }
+            return null;
+        }
+
+        function findForcedMove(player) {
+            let opponent = player === 1 ? 2 : 1;
+            let candidates = getCandidates();
+
+            for (let cand of candidates) {
+                board[cand.r][cand.c] = player;
+                if (checkWin(cand.r, cand.c, player)) { board[cand.r][cand.c] = 0; return cand; }
+                board[cand.r][cand.c] = 0;
+            }
+
+            for (let cand of candidates) {
+                board[cand.r][cand.c] = opponent;
+                if (checkWin(cand.r, cand.c, opponent)) { board[cand.r][cand.c] = 0; return cand; }
+                board[cand.r][cand.c] = 0;
+            }
+
+            let vcfMove = checkVCF(player, 6);
+            if (vcfMove) return vcfMove;
+
+            let oppVcfMove = checkVCF(opponent, 6);
+            if (oppVcfMove) return oppVcfMove;
+
+            for (let cand of candidates) {
+                let score = evaluateCellPattern(cand.r, cand.c, player);
+                if (score >= 2000000) return cand;
+            }
+            for (let cand of candidates) {
+                let score = evaluateCellPattern(cand.r, cand.c, opponent);
+                if (score >= 2000000) return cand;
+            }
+
+            for (let cand of candidates) {
+                let score = evaluateCellPattern(cand.r, cand.c, player);
+                if (score >= 800000) return cand;
+            }
+            for (let cand of candidates) {
+                let score = evaluateCellPattern(cand.r, cand.c, opponent);
+                if (score >= 800000) return cand;
+            }
+
+            return null;
+        }
+
+        function minimax(depth, alpha, beta, isMaximizing, player) {
+            let opponent = player === 1 ? 2 : 1;
+
+            if (depth === 0) return evaluateBoard(player);
+
+            let ttEntry = TT_CACHE.get(currentBoardHash);
+            if (ttEntry && ttEntry.depth >= depth) {
+                return ttEntry.score;
+            }
+
+            let candidates = getCandidates();
+
+            candidates.sort((a, b) => {
+                let scoreA = evaluateCellPattern(a.r, a.c, isMaximizing ? player : opponent);
+                let scoreB = evaluateCellPattern(b.r, b.c, isMaximizing ? player : opponent);
+                return scoreB - scoreA;
+            });
+
+            candidates = candidates.slice(0, 10);
+
+            if (isMaximizing) {
+                let maxEval = -Infinity;
+                for (let cand of candidates) {
+                    applyMoveToState(cand.r, cand.c, player);
+
+                    if (checkWin(cand.r, cand.c, player)) {
+                        undoMoveFromState(cand.r, cand.c, player);
+                        return 10000000 + depth;
+                    }
+
+                    let evalVal = minimax(depth - 1, alpha, beta, false, player);
+                    undoMoveFromState(cand.r, cand.c, player);
+
+                    maxEval = Math.max(maxEval, evalVal);
+                    alpha = Math.max(alpha, evalVal);
+                    if (beta <= alpha) break;
+                }
+                TT_CACHE.set(currentBoardHash, { depth, score: maxEval });
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+                for (let cand of candidates) {
+                    applyMoveToState(cand.r, cand.c, opponent);
+
+                    if (checkWin(cand.r, cand.c, opponent)) {
+                        undoMoveFromState(cand.r, cand.c, opponent);
+                        return -10000000 - depth;
+                    }
+
+                    let evalVal = minimax(depth - 1, alpha, beta, true, player);
+                    undoMoveFromState(cand.r, cand.c, opponent);
+
+                    minEval = Math.min(minEval, evalVal);
+                    beta = Math.min(beta, evalVal);
+                    if (beta <= alpha) break;
+                }
+                TT_CACHE.set(currentBoardHash, { depth, score: minEval });
+                return minEval;
+            }
+        }
+
+        function getBestMove(player) {
+            if (moveHistory.length === 0) return { r: 50, c: 50 };
+
+            let forced = findForcedMove(player);
+            if (forced) return forced;
+
+            let opponent = player === 1 ? 2 : 1;
+            let candidates = getCandidates();
+
+            let bestMove = candidates[0];
+            let bestValue = -Infinity;
+
+            candidates.sort((a, b) => {
+                let scoreA = evaluateCellPattern(a.r, a.c, player) + evaluateCellPattern(a.r, a.c, opponent) * 1.25;
+                let scoreB = evaluateCellPattern(b.r, b.c, player) + evaluateCellPattern(b.r, b.c, opponent) * 1.25;
+                return scoreB - scoreA;
+            });
+            candidates = candidates.slice(0, 12);
+
+            for (let cand of candidates) {
+                applyMoveToState(cand.r, cand.c, player);
+                let moveValue = minimax(searchDepth - 1, -Infinity, Infinity, false, player);
+                undoMoveFromState(cand.r, cand.c, player);
+
+                if (moveValue > bestValue) {
+                    bestValue = moveValue;
+                    bestMove = cand;
+                }
+            }
+
+            return bestMove;
+        }
+
+        function makeMove(r, c) {
+            applyMoveToState(r, c, currentPlayer);
+
+            if (currentPlayer === 1) scoreX -= 1; else scoreO -= 1;
+
+            let winLine = checkWin(r, c, currentPlayer);
+            if (winLine) {
+                learnFromGame(currentPlayer);
+                if (currentPlayer === 1) { winsX++; scoreX += winPoints; scoreO -= lossPoints; }
+                else { winsO++; scoreO += winPoints; scoreX -= lossPoints; }
+                totalGames++;
+                
+                winningLine = winLine; draw(); isRunning = false;
+                
+                // Tự động qua ván mới nếu bật Tự Động (Áp dụng cho mọi chế độ: AI vs AI, Player vs AI, PvP)
+                if (isAutoLoop) {
+                    setTimeout(() => {
+                        winningLine = null; resetBoard();
+                        isRunning = true;
+                        if (!isHumanTurn()) step();
+                    }, 2000);
+                }
+            } else if (moveHistory.length >= 500) {
+                learnFromGame(0);
+                drawGames++; scoreX -= drawPoints; scoreO -= drawPoints; totalGames++;
+                resetBoard();
+                if (isAutoLoop) {
+                    isRunning = true;
+                    if (!isHumanTurn()) setTimeout(step, speedMs);
+                }
+            } else {
+                currentPlayer = currentPlayer === 1 ? 2 : 1;
+                if (isRunning && !isHumanTurn()) {
+                    setTimeout(step, speedMs);
+                }
+            }
+            updateUI(); draw();
+        }
+
+        function executeSingleMove() {
+            if (winningLine) return;
+            if (isHumanTurn()) return; 
+            let move = getBestMove(currentPlayer);
+            if (move && board[move.r][move.c] === 0) { makeMove(move.r, move.c); }
+        }
+
+        function step() { if (!isRunning) return; executeSingleMove(); }
+
+        function resetBoard() {
+            board = Array.from({ length: GRID_SIZE }, () => new Uint8Array(GRID_SIZE));
+            moveHistory = []; winningLine = null; currentBoardHash = 0n; TT_CACHE.clear();
+            suggestedMove = null;
+            currentPlayer = (totalGames % 2 === 0) ? 1 : 2;
+            updateUI(); draw();
+            if (isRunning && !isHumanTurn()) setTimeout(step, speedMs);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let effectiveCell = baseCellSize * scale;
+
+            ctx.strokeStyle = '#222233'; ctx.lineWidth = 1;
+            for (let r = 0; r <= GRID_SIZE; r++) {
+                let y = r * effectiveCell + panY;
+                if (y >= -100 && y <= canvas.height + 100) {
+                    ctx.beginPath(); ctx.moveTo(panX, y); ctx.lineTo(GRID_SIZE * effectiveCell + panX, y); ctx.stroke();
+                }
+            }
+            for (let c = 0; c <= GRID_SIZE; c++) {
+                let x = c * effectiveCell + panX;
+                if (x >= -100 && x <= canvas.width + 100) {
+                    ctx.beginPath(); ctx.moveTo(x, panY); ctx.lineTo(x, GRID_SIZE * effectiveCell + panY); ctx.stroke();
+                }
+            }
+
+            // Vẽ ô gợi ý (Màu vàng nhạt)
+            if (suggestedMove && board[suggestedMove.r][suggestedMove.c] === 0) {
+                let sx = suggestedMove.c * effectiveCell + panX;
+                let sy = suggestedMove.r * effectiveCell + panY;
+                if (sx + effectiveCell >= 0 && sx <= canvas.width && sy + effectiveCell >= 0 && sy <= canvas.height) {
+                    ctx.fillStyle = 'rgba(255, 235, 59, 0.45)';
+                    ctx.fillRect(sx + 1, sy + 1, effectiveCell - 2, effectiveCell - 2);
+                }
+            }
+
+            for (let move of moveHistory) {
+                let val = board[move.r][move.c];
+                let x = move.c * effectiveCell + panX;
+                let y = move.r * effectiveCell + panY;
+
+                if (x + effectiveCell < 0 || x > canvas.width || y + effectiveCell < 0 || y > canvas.height) continue;
+
+                if (moveHistory[moveHistory.length - 1] === move) {
+                    ctx.fillStyle = 'rgba(255, 235, 59, 0.25)';
+                    ctx.fillRect(x + 1, y + 1, effectiveCell - 2, effectiveCell - 2);
+                }
+
+                let pad = effectiveCell * 0.18;
+                if (val === 1) {
+                    ctx.strokeStyle = '#ff5252'; ctx.lineWidth = Math.max(1.5, 2.5 * scale);
+                    ctx.beginPath(); ctx.moveTo(x + pad, y + pad); ctx.lineTo(x + effectiveCell - pad, y + effectiveCell - pad);
+                    ctx.moveTo(x + effectiveCell - pad, y + pad); ctx.lineTo(x + pad, y + effectiveCell - pad); ctx.stroke();
+                } else if (val === 2) {
+                    ctx.strokeStyle = '#448aff'; ctx.lineWidth = Math.max(1.5, 2.5 * scale);
+                    ctx.beginPath(); ctx.arc(x + effectiveCell / 2, y + effectiveCell / 2, (effectiveCell / 2) - pad, 0, Math.PI * 2); ctx.stroke();
+                }
+            }
+
+            // Hoạt ảnh đường thẳng cheo/ngang/dọc kết nối 5 ô khi có bên chiến thắng
+            if (winningLine && winningLine.length >= 5) {
+                let start = winningLine[0];
+                let end = winningLine[winningLine.length - 1];
+                let startX = start.c * effectiveCell + panX + effectiveCell / 2;
+                let startY = start.r * effectiveCell + panY + effectiveCell / 2;
+                let endX = end.c * effectiveCell + panX + effectiveCell / 2;
+                let endY = end.r * effectiveCell + panY + effectiveCell / 2;
+
+                ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = Math.max(4, 6 * scale); ctx.lineCap = 'round';
+                ctx.beginPath(); ctx.moveTo(startX, startY); ctx.lineTo(endX, endY); ctx.stroke();
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('totalGames').innerText = totalGames;
+            document.getElementById('drawCount').innerText = drawGames;
+            document.getElementById('memoryCount').innerText = Object.keys(aiMemory).length;
+            document.getElementById('winsX').innerText = winsX;
+            document.getElementById('winsO').innerText = winsO;
+            document.getElementById('scoreX').innerText = scoreX;
+            document.getElementById('scoreO').innerText = scoreO;
+
+            let badge = document.getElementById('modeDisplay');
+            let labelX = document.getElementById('labelX');
+            let labelO = document.getElementById('labelO');
+
+            if (currentMode === 'aivsai') {
+                badge.innerText = "CHẾ ĐỘ: AI VS AI"; badge.className = "mode-badge mode-aivsai";
+                labelX.innerText = "🔴 Quân Đỏ (X) - AI";
+                labelO.innerText = "🔵 Quân Xanh (O) - AI";
+            } else if (currentMode === 'p1_vs_ai') {
+                badge.innerText = "CHẾ ĐỘ: PLAYER (X) VS AI (O)"; badge.className = "mode-badge mode-playerai";
+                labelX.innerText = "🔴 Quân Đỏ (X) - PLAYER";
+                labelO.innerText = "🔵 Quân Xanh (O) - AI";
+            } else if (currentMode === 'ai_vs_p2') {
+                badge.innerText = "CHẾ ĐỘ: AI (X) VS PLAYER (O)"; badge.className = "mode-badge mode-playerai";
+                labelX.innerText = "🔴 Quân Đỏ (X) - AI";
+                labelO.innerText = "🔵 Quân Xanh (O) - PLAYER";
+            } else if (currentMode === 'pvp') {
+                badge.innerText = "CHẾ ĐỘ: PLAYER VS PLAYER"; badge.className = "mode-badge mode-pvp";
+                labelX.innerText = "🔴 Quân Đỏ (X) - PLAYER 1";
+                labelO.innerText = "🔵 Quân Xanh (O) - PLAYER 2";
+            }
+        }
+
+        function copyMoveHistory() {
+            if (moveHistory.length === 0) {
+                alert("Chưa có nước đi nào trong ván này!");
+                return;
+            }
+
+            const formatted = moveHistory.map((m, index) => {
+                let symbol = m.player === 1 ? 'X' : 'O';
+                return `${index + 1}. ${symbol}(${m.r},${m.c})`;
+            }).join(" -> ");
+
+            navigator.clipboard.writeText(formatted).then(() => {
+                alert("📋 Đã sao chép lịch sử nước đi!");
+            }).catch(err => {
+                alert("Lỗi sao chép: " + err);
+            });
+        }
+
+        // Feature: Suggest Best Move for Player
+        document.getElementById('btnHint').onclick = () => {
+            if (!isHumanTurn()) {
+                alert("Gợi ý chỉ khả dụng khi tới lượt người chơi!");
+                return;
+            }
+            if (winningLine) return;
+            
+            let move = getBestMove(currentPlayer);
+            if (move) {
+                suggestedMove = move;
+                draw();
+            }
+        };
+
+        // Feature: Toggle Sidebar Left (Góc trên bên trái)
+        const sidebar = document.getElementById('sidebar');
+        const btnToggleSidebar = document.getElementById('btnToggleSidebar');
+        btnToggleSidebar.onclick = () => {
+            sidebar.classList.toggle('collapsed');
+            btnToggleSidebar.innerText = sidebar.classList.contains('collapsed') ? '▶ Hiện Panel' : '◀ Ẩn Panel';
+            setTimeout(resizeCanvas, 300);
+        };
+
+        // Feature: Toggle All Extra UI (Góc trên bên phải)
+        const btnToggleFullUI = document.getElementById('btnToggleFullUI');
+        btnToggleFullUI.onclick = () => {
+            document.body.classList.toggle('ui-clean-mode');
+        };
+
+        // Feature: Toggle Stats Section
+        const statsContainer = document.getElementById('statsContainer');
+        const btnToggleStats = document.getElementById('btnToggleStats');
+        let isStatsVisible = true;
+        btnToggleStats.onclick = () => {
+            isStatsVisible = !isStatsVisible;
+            statsContainer.style.display = isStatsVisible ? 'block' : 'none';
+            btnToggleStats.innerText = isStatsVisible ? '👁️ Ẩn Bảng Dữ Liệu' : '👁️ Hiện Bảng Dữ Liệu';
+        };
+
+        document.getElementById('gameModeSelect').onchange = (e) => {
+            currentMode = e.target.value;
+            resetBoard();
+        };
+
+        document.getElementById('btnStart').onclick = () => { 
+            isRunning = true; 
+            if (!isHumanTurn()) step();
+        };
+        
+        document.getElementById('btnAuto').onclick = () => {
+            isAutoLoop = !isAutoLoop;
+            let btn = document.getElementById('btnAuto');
+            if (isAutoLoop) {
+                btn.style.backgroundColor = '#e91e63'; 
+                btn.innerText = '🔄 Tự Động (Bật)'; 
+                isRunning = true; 
+                if (!isHumanTurn()) step();
+            } else {
+                btn.style.backgroundColor = '#9c27b0'; 
+                btn.innerText = '🔄 Tự Động';
+            }
+        };
+
+        document.getElementById('btnStop').onclick = () => {
+            isRunning = false; isAutoLoop = false;
+            document.getElementById('btnAuto').style.backgroundColor = '#9c27b0';
+            document.getElementById('btnAuto').innerText = '🔄 Tự Động';
+        };
+
+        document.getElementById('btnStep').onclick = () => { executeSingleMove(); };
+        document.getElementById('btnCopyMoves').onclick = copyMoveHistory;
+        document.getElementById('btnReset').onclick = () => {
+            isRunning = false; isAutoLoop = false; totalGames = 0; winsX = 0; winsO = 0; drawGames = 0;
+            scoreX = 10000; scoreO = 10000; resetBoard(); updateUI(); draw();
+        };
+
+        document.getElementById('btnClearMemory').onclick = () => {
+            if (confirm("Xóa toàn bộ dữ liệu trí nhớ AI?")) {
+                aiMemory = {}; localStorage.removeItem('caro_ai_memory'); updateUI();
+            }
+        };
+
+        document.getElementById('depthSlider').oninput = (e) => { searchDepth = parseInt(e.target.value); document.getElementById('depthVal').innerText = searchDepth + ' nước'; };
+        document.getElementById('speedSlider').oninput = (e) => { speedMs = parseInt(e.target.value); document.getElementById('speedVal').innerText = speedMs + ' ms'; };
+        document.getElementById('winSlider').oninput = (e) => { winPoints = parseInt(e.target.value); document.getElementById('winVal').innerText = '+' + winPoints; };
+        document.getElementById('lossSlider').oninput = (e) => { lossPoints = parseInt(e.target.value); document.getElementById('lossVal').innerText = '-' + lossPoints; };
+        document.getElementById('drawSlider').oninput = (e) => { drawPoints = parseInt(e.target.value); document.getElementById('drawVal').innerText = '-' + drawPoints; };
+
+        // Zoom Controls
+        document.getElementById('btnZoomIn').onclick = () => applyZoom(1.2, canvas.width / 2, canvas.height / 2);
+        document.getElementById('btnZoomOut').onclick = () => applyZoom(0.8, canvas.width / 2, canvas.height / 2);
+        document.getElementById('btnZoomIn25').onclick = () => applyZoom(1.25, canvas.width / 2, canvas.height / 2);
+        document.getElementById('btnZoomOut25').onclick = () => applyZoom(0.75, canvas.width / 2, canvas.height / 2);
+        document.getElementById('btnZoomReset').onclick = () => centerView();
+
+        // Khởi tạo ban đầu
+        resizeCanvas();
+        centerView();
+        updateUI();
+    </script>
+</body>
+</html>
